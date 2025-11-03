@@ -222,7 +222,7 @@ export default function App() {
   );
 
   if (activeFeature) {
-    return (  
+    return (
       <div className="min-h-screen bg-background">
         {/* Header */}
         <div className="border-b bg-card sticky top-0 z-50">
