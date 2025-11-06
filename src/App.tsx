@@ -40,6 +40,8 @@ import { Translation } from './components/translation';
 import { BookReader } from './components/book-reader';
 import { MotivationalContent } from './components/motivational-content';
 import { ImmersiveEnvironment } from './components/immersive-environment';
+import { EmotionAssistant } from './components/emotion-analyzer';
+
 
 interface Feature {
   id: string;
@@ -138,7 +140,16 @@ const features: Feature[] = [
     icon: <Sparkles className="w-5 h-5" />,
     color: 'bg-violet-500',
     category: 'interactive'
-  }
+  },
+  {
+  id: 'emotion',
+  name: 'Emotion Analyzer',
+  description: 'Detect mood & get wellness suggestions',
+  icon: <Smile className="w-5 h-5" />,
+  color: 'bg-rose-500',
+  category: 'wellness'
+},
+
 ];
 
 export default function App() {
@@ -192,6 +203,8 @@ export default function App() {
       case 'books': return <BookReader />;
       case 'motivation': return <MotivationalContent />;
       case 'environment': return <ImmersiveEnvironment />;
+      case 'emotion': return <EmotionAssistant />;
+
       default: return null;
     }
   };
@@ -222,7 +235,7 @@ export default function App() {
   );
 
   if (activeFeature) {
-    return (  
+    return (
       <div className="min-h-screen bg-background">
         {/* Header */}
         <div className="border-b bg-card sticky top-0 z-50">
