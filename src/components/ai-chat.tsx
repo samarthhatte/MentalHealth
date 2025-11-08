@@ -42,57 +42,65 @@ export function AIChat() {
     }
   }, [messages]);
 
+  // ... existing imports and state ...
+
   const sendMessage = async () => {
-  if (!inputValue.trim()) return;
+    if (!inputValue.trim()) return;
 
-  const userMessage: Message = {
-    id: Date.now().toString(),
-    content: inputValue,
-    sender: 'user',
-    timestamp: new Date(),
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: inputValue,
+      sender: 'user',
+      timestamp: new Date(),
+    };
+
+    // Temporarily append user message to display it immediately
+    const messagesWithNewUser = [...messages, userMessage]; 
+    setMessages(messagesWithNewUser); 
+    setInputValue('');
+    setIsTyping(true);
+
+    try {
+      // 1. **CHANGE URL**: Target the correct endpoint
+      const response = await fetch("https://scaling-trust-ai.onrender.com/api/mental-support-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // 2. **CHANGE BODY**: Send the entire conversation history
+        body: JSON.stringify({
+          messages: messagesWithNewUser.map(m => ({
+            role: m.sender === "user" ? "user" : "assistant",
+            content: m.content
+          }))
+        })
+      });
+
+      const data = await response.json();
+
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        // 3. **CHANGE RESPONSE KEY**: The new endpoint returns 'response'
+        content: data.response || "I'm here with you. Could you tell me more?", 
+        sender: 'ai',
+        timestamp: new Date(),
+      };
+
+      // Update state with the new AI message
+      setMessages(prev => [...prev, aiMessage]); 
+    } catch (error) {
+      console.error("Chat API error:", error);
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 2).toString(),
+        content: "Sorry, I'm having trouble connecting right now. Please try again later.",
+        sender: 'ai',
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
-  setMessages(prev => [...prev, userMessage]);
-  setInputValue('');
-  setIsTyping(true);
+// ... rest of the component
 
-try {
-  const response = await fetch("https://scaling-trust-ai.onrender.com/api/mental-support-chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: inputValue }), // correct field
-  });
-
-  const data = await response.json();
-
-  const aiText =
-    data.response ||
-    data.answer ||
-    data.output ||
-    data.message ||
-    data.result ||
-    data.text ||
-    "I'm here for you. Could you please tell me more?";
-
-  const aiMessage: Message = {
-    id: (Date.now() + 1).toString(),
-    content: aiText,
-    sender: 'ai',
-    timestamp: new Date(),
-  };
-
-  setMessages(prev => [...prev, aiMessage]);
-} catch (error) {
-  setMessages(prev => [...prev, {
-    id: (Date.now() + 2).toString(),
-    content: "Sorry, I'm having trouble connecting right now. Please try again later.",
-    sender: 'ai',
-    timestamp: new Date(),
-  }]);
-} finally {
-  setIsTyping(false);
-}
-};
 
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -142,20 +150,21 @@ try {
                 )}
               </div>
             ))}
-            {isTyping && (
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded-lg">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="C:\Users\samarth\Downloads\Mental Wellness Web App\src\styles\globals.css"></div>
-                    <div className="C:\Users\samarth\Downloads\Mental Wellness Web App\src\styles\globals.css"></div>
-                  </div>
+           {isTyping && (
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                <Bot className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded-lg">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-150"></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-300"></div>
                 </div>
               </div>
-            )}
+            </div>
+          )}
+
           </div>
         </ScrollArea>
       </div>
