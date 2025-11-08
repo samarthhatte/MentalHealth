@@ -42,7 +42,8 @@ const environments: Environment[] = [
     icon: <CloudRain className="w-6 h-6" />,
     primaryColor: '#64748b',
     secondaryColor: '#94a3b8',
-    particles: { type: 'rain', count: 50 }
+    particles: { type: 'rain', count: 50 },
+    soundUrl: "http://localhost:5000/sounds/rain_cloud.mp3",
   },
   {
     id: 'sunset',
@@ -51,7 +52,8 @@ const environments: Environment[] = [
     icon: <Sun className="w-6 h-6" />,
     primaryColor: '#f59e0b',
     secondaryColor: '#f97316',
-    particles: { type: 'sparkles', count: 30 }
+    particles: { type: 'sparkles', count: 30 },
+    soundUrl: "http://localhost:5000/sounds/sunset.mp3",
   },
   {
     id: 'night',
@@ -60,7 +62,8 @@ const environments: Environment[] = [
     icon: <Moon className="w-6 h-6" />,
     primaryColor: '#1e293b',
     secondaryColor: '#334155',
-    particles: { type: 'fireflies', count: 25 }
+    particles: { type: 'fireflies', count: 25 },
+    soundUrl: "http://localhost:5000/sounds/night.mp3",
   },
   {
     id: 'forest',
@@ -69,7 +72,8 @@ const environments: Environment[] = [
     icon: <Trees className="w-6 h-6" />,
     primaryColor: '#16a34a',
     secondaryColor: '#22c55e',
-    particles: { type: 'leaves', count: 40 }
+    particles: { type: 'leaves', count: 40 },
+    soundUrl: "http://localhost:5000/sounds/forest_leaves.mp3",
   },
   {
     id: 'ocean',
@@ -78,7 +82,8 @@ const environments: Environment[] = [
     icon: <Waves className="w-6 h-6" />,
     primaryColor: '#0ea5e9',
     secondaryColor: '#06b6d4',
-    particles: { type: 'bubbles', count: 35 }
+    particles: { type: 'bubbles', count: 35 },
+    soundUrl: "http://localhost:5000/sounds/ocean_bubbles.mp3",
   },
   {
     id: 'winter',
@@ -87,7 +92,8 @@ const environments: Environment[] = [
     icon: <Snowflake className="w-6 h-6" />,
     primaryColor: '#e0f2fe',
     secondaryColor: '#bae6fd',
-    particles: { type: 'snow', count: 60 }
+    particles: { type: 'snow', count: 60 },
+    soundUrl: "http://localhost:5000/sounds/winter.mp3",
   },
   {
     id: 'fireplace',
@@ -96,7 +102,8 @@ const environments: Environment[] = [
     icon: <Flame className="w-6 h-6" />,
     primaryColor: '#dc2626',
     secondaryColor: '#f97316',
-    particles: { type: 'sparkles', count: 45 }
+    particles: { type: 'sparkles', count: 45 },
+    soundUrl: "http://localhost:5000/sounds/warm_fireplace.mp3",
   },
   {
     id: 'mountain',
@@ -105,7 +112,8 @@ const environments: Environment[] = [
     icon: <Mountain className="w-6 h-6" />,
     primaryColor: '#7c3aed',
     secondaryColor: '#a855f7',
-    particles: { type: 'sparkles', count: 20 }
+    particles: { type: 'sparkles', count: 20 },
+    soundUrl: "http://localhost:5000/sounds/mountain.mp3",
   }
 ];
 
@@ -128,7 +136,54 @@ export function ImmersiveEnvironment() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [particles, setParticles] = useState<Particle[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | null>(null);
+
+    // Add sound handling
+  const BASE_URL = "http://localhost:5000"; // adjust if your backend runs on another port
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // When environment changes, load and play the corresponding sound
+    if (selectedEnv.soundUrl) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+
+      const audio = new Audio(selectedEnv.soundUrl);
+      audio.loop = true;
+      audio.volume = isMuted ? 0 : volume / 100;
+      audioRef.current = audio;
+
+      if (isPlaying) {
+        audio.play().catch(err => console.error("Audio play error:", err));
+      }
+    }
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, [selectedEnv]);
+
+  useEffect(() => {
+    // Handle play/pause toggle
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.play().catch(err => console.error("Audio play error:", err));
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    // Update volume or mute
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume / 100;
+    }
+  }, [volume, isMuted]);
+
 
   useEffect(() => {
     initializeParticles();
@@ -396,7 +451,7 @@ export function ImmersiveEnvironment() {
                   </Button>
                   <Slider
                     value={[volume]}
-                    onValueChange={(value) => setVolume(value[0])}
+                    onValueChange={(value: number[]) => setVolume(value[0])}
                     max={100}
                     step={1}
                     className="w-20"

@@ -15,74 +15,24 @@ interface Sound {
 }
 
 export function CalmingSounds() {
+  const BASE_URL = "http://localhost:5000";
   const [sounds, setSounds] = useState<Sound[]>([
-    {
-      id: 'rain',
-      name: 'Rain',
-      icon: '🌧️',
-      description: 'Gentle rainfall sounds',
-      url: '/sounds/rain.mp3', // These would be actual audio files in a real app
-      isPlaying: false,
-      volume: 50,
-    },
-    {
-      id: 'ocean',
-      name: 'Ocean Waves',
-      icon: '🌊',
-      description: 'Peaceful ocean waves',
-      url: '/sounds/ocean.mp3',
-      isPlaying: false,
-      volume: 50,
-    },
-    {
-      id: 'forest',
-      name: 'Forest',
-      icon: '🌲',
-      description: 'Birds and nature sounds',
-      url: '/sounds/forest.mp3',
-      isPlaying: false,
-      volume: 50,
-    },
-    {
-      id: 'fireplace',
-      name: 'Fireplace',
-      icon: '🔥',
-      description: 'Crackling fireplace',
-      url: '/sounds/fireplace.mp3',
-      isPlaying: false,
-      volume: 50,
-    },
-    {
-      id: 'whitenoise',
-      name: 'White Noise',
-      icon: '📻',
-      description: 'Consistent white noise',
-      url: '/sounds/whitenoise.mp3',
-      isPlaying: false,
-      volume: 50,
-    },
-    {
-      id: 'cafe',
-      name: 'Coffee Shop',
-      icon: '☕',
-      description: 'Ambient cafe sounds',
-      url: '/sounds/cafe.mp3',
-      isPlaying: false,
-      volume: 50,
-    },
+    { id: 'rain', name: 'Rain', icon: '🌧️', description: 'Gentle rainfall sounds', url: `${BASE_URL}/sounds/rain.mp3`, isPlaying: false, volume: 50 },
+    { id: 'ocean', name: 'Ocean Waves', icon: '🌊', description: 'Peaceful ocean waves', url: `${BASE_URL}/sounds/ocean.mp3`, isPlaying: false, volume: 50 },
+    { id: 'forest', name: 'Forest', icon: '🌲', description: 'Birds and nature sounds', url: `${BASE_URL}/sounds/forest.mp3`, isPlaying: false, volume: 50 },
+    { id: 'fireplace', name: 'Fireplace', icon: '🔥', description: 'Crackling fireplace', url: `${BASE_URL}/sounds/fireplace.mp3`, isPlaying: false, volume: 50 },
+    { id: 'whitenoise', name: 'White Noise', icon: '📻', description: 'Consistent white noise', url: `${BASE_URL}/sounds/whitenoise.mp3`, isPlaying: false, volume: 50 },
+    { id: 'cafe', name: 'Coffee Shop', icon: '☕', description: 'Ambient cafe sounds', url: `${BASE_URL}/sounds/cafe.mp3`, isPlaying: false, volume: 50 },
   ]);
 
   const [masterVolume, setMasterVolume] = useState(70);
   const [isMuted, setIsMuted] = useState(false);
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
 
-  // Create audio elements
   useEffect(() => {
-    sounds.forEach(sound => {
+    sounds.forEach((sound) => {
       if (!audioRefs.current[sound.id]) {
-        // In a real app, these would be actual audio files
-        // For demo purposes, we'll create silent audio elements
-        const audio = new Audio();
+        const audio = new Audio(sound.url);
         audio.loop = true;
         audio.volume = (sound.volume / 100) * (masterVolume / 100);
         audioRefs.current[sound.id] = audio;
@@ -90,18 +40,16 @@ export function CalmingSounds() {
     });
 
     return () => {
-      // Cleanup audio elements
-      Object.values(audioRefs.current).forEach(audio => {
+      Object.values(audioRefs.current).forEach((audio) => {
         audio.pause();
         audio.src = '';
       });
     };
   }, []);
 
-  // Update audio volumes when master volume or individual volumes change
   useEffect(() => {
     Object.entries(audioRefs.current).forEach(([soundId, audio]) => {
-      const sound = sounds.find(s => s.id === soundId);
+      const sound = sounds.find((s) => s.id === soundId);
       if (sound) {
         audio.volume = isMuted ? 0 : (sound.volume / 100) * (masterVolume / 100);
       }
@@ -112,21 +60,12 @@ export function CalmingSounds() {
     const audio = audioRefs.current[soundId];
     if (!audio) return;
 
-    setSounds(prevSounds =>
-      prevSounds.map(sound => {
+    setSounds((prevSounds) =>
+      prevSounds.map((sound) => {
         if (sound.id === soundId) {
           const newPlaying = !sound.isPlaying;
-          
-          if (newPlaying) {
-            // In a real app, this would play the actual audio
-            // For demo, we'll just simulate the play state
-            console.log(`Playing ${sound.name} sound`);
-            // audio.play().catch(console.error);
-          } else {
-            // audio.pause();
-            console.log(`Pausing ${sound.name} sound`);
-          }
-          
+          if (newPlaying) audio.play().catch((err) => console.error(`Error playing ${sound.name}:`, err));
+          else audio.pause();
           return { ...sound, isPlaying: newPlaying };
         }
         return sound;
@@ -135,46 +74,35 @@ export function CalmingSounds() {
   };
 
   const updateSoundVolume = (soundId: string, volume: number) => {
-    setSounds(prevSounds =>
-      prevSounds.map(sound =>
+    setSounds((prevSounds) =>
+      prevSounds.map((sound) =>
         sound.id === soundId ? { ...sound, volume } : sound
       )
     );
   };
 
   const stopAllSounds = () => {
-    setSounds(prevSounds =>
-      prevSounds.map(sound => {
-        if (sound.isPlaying) {
-          const audio = audioRefs.current[sound.id];
-          if (audio) {
-            audio.pause();
-          }
-        }
-        return { ...sound, isPlaying: false };
-      })
+    Object.values(audioRefs.current).forEach((audio) => audio.pause());
+    setSounds((prevSounds) =>
+      prevSounds.map((sound) => ({ ...sound, isPlaying: false }))
     );
   };
 
-  const playingCount = sounds.filter(s => s.isPlaying).length;
+  const playingCount = sounds.filter((s) => s.isPlaying).length;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Master Controls */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2>Calming Sounds</h2>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">
-              {playingCount} sound{playingCount !== 1 ? 's' : ''} playing
-            </span>
-            {playingCount > 0 && (
-              <Button variant="outline" onClick={stopAllSounds}>
-                Stop All
-              </Button>
-            )}
-          </div>
-        </div>
+    <div className="p-6 max-w-7xl mx-auto">
+      <Card className="p-6 mb-8">
+        <h1 className="text-3xl font-bold mb-2">Calming Sounds</h1>
+        <p className="text-muted-foreground mb-6">
+          {playingCount} sound{playingCount !== 1 ? 's' : ''} playing
+        </p>
+
+        {playingCount > 0 && (
+          <Button variant="outline" onClick={stopAllSounds}>
+           Stop All
+          </Button>
+        )}
 
         <div className="flex items-center gap-4 mb-6">
           <Button
@@ -190,7 +118,7 @@ export function CalmingSounds() {
               <span className="text-sm w-20">Master Volume</span>
               <Slider
                 value={[masterVolume]}
-                onValueChange={(value) => setMasterVolume(value[0])}
+                onValueChange={(value: number[]) => setMasterVolume(value[0])}
                 max={100}
                 step={1}
                 className="flex-1"
@@ -202,9 +130,8 @@ export function CalmingSounds() {
         </div>
       </Card>
 
-      {/* Sound Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sounds.map(sound => (
+        {sounds.map((sound) => (
           <Card key={sound.id} className="p-6">
             <div className="text-center mb-4">
               <div className="text-4xl mb-2">{sound.icon}</div>
@@ -238,7 +165,9 @@ export function CalmingSounds() {
                 </div>
                 <Slider
                   value={[sound.volume]}
-                  onValueChange={(value) => updateSoundVolume(sound.id, value[0])}
+                  onValueChange={(value: number[]) =>
+                    updateSoundVolume(sound.id, value[0])
+                  }
                   max={100}
                   step={1}
                   disabled={!sound.isPlaying || isMuted}
@@ -248,40 +177,6 @@ export function CalmingSounds() {
           </Card>
         ))}
       </div>
-
-      {/* Information Card */}
-      <Card className="p-6">
-        <h3 className="mb-4">About Calming Sounds</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-          <div>
-            <h4 className="mb-2">Benefits</h4>
-            <ul className="space-y-1 text-muted-foreground">
-              <li>• Reduces stress and anxiety</li>
-              <li>• Improves focus and concentration</li>
-              <li>• Helps with sleep and relaxation</li>
-              <li>• Masks distracting noises</li>
-              <li>• Creates a peaceful environment</li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="mb-2">Tips for Use</h4>
-            <ul className="space-y-1 text-muted-foreground">
-              <li>• Mix different sounds for variety</li>
-              <li>• Adjust volumes to your preference</li>
-              <li>• Use during meditation or work</li>
-              <li>• Try different combinations</li>
-              <li>• Use headphones for better experience</li>
-            </ul>
-          </div>
-        </div>
-        
-        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            💡 <strong>Note:</strong> In this demo, actual audio playback is simulated. 
-            In a full implementation, these would play real calming audio files.
-          </p>
-        </div>
-      </Card>
     </div>
   );
 }
