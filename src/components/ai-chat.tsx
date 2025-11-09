@@ -62,7 +62,7 @@ export function AIChat() {
 
     try {
       // 1. **CHANGE URL**: Target the correct endpoint
-      const response = await fetch("https://scaling-trust-ai.onrender.com/api/mental-support-chat", {
+      const response = await fetch("https://scaling-trust-ai.onrender.com/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // 2. **CHANGE BODY**: Send the entire conversation history
