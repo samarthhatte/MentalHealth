@@ -62,27 +62,26 @@ export function AIChat() {
 
     try {
       // 1. **CHANGE URL**: Target the correct endpoint
-      const response = await fetch("https://scaling-trust-ai.onrender.com/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // 2. **CHANGE BODY**: Send the entire conversation history
-        body: JSON.stringify({
-          messages: messagesWithNewUser.map(m => ({
-            role: m.sender === "user" ? "user" : "assistant",
-            content: m.content
-          }))
-        })
-      });
+      const response = await fetch("https://scaling-trust-ai.onrender.com/api/mental-support-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: messagesWithNewUser.map(m => ({
+          role: m.sender === "user" ? "user" : "assistant",
+          content: m.content
+        }))
+      })
+    });
 
-      const data = await response.json();
+    const data = await response.json();
 
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        // 3. **CHANGE RESPONSE KEY**: The new endpoint returns 'response'
-        content: data.response || "I'm here with you. Could you tell me more?", 
-        sender: 'ai',
-        timestamp: new Date(),
-      };
+    const aiMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      content: data.response ?? "I'm here with you. Could you tell me more?",
+      sender: 'ai',
+      timestamp: new Date(),
+    };
+
 
       // Update state with the new AI message
       setMessages(prev => [...prev, aiMessage]); 
