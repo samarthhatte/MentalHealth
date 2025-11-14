@@ -65,26 +65,31 @@ export function AIChat() {
       const response = await fetch("https://scaling-trust-ai.onrender.com/api/mental-support-chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: messagesWithNewUser.map(m => ({
-          role: m.sender === "user" ? "user" : "assistant",
-          content: m.content
-        }))
+     body: JSON.stringify({
+        message: userMessage.content
       })
+
     });
 
-    const data = await response.json();
+const data = await response.json();
+console.log("RAW AI RESPONSE:", data); // keep this for debugging
 
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      content: data.response ?? "I'm here with you. Could you tell me more?",
-      sender: 'ai',
-      timestamp: new Date(),
-    };
+const aiMsgText =
+  data.message ??
+  data.response ??
+  data.output ??
+  (Array.isArray(data) ? data[0]?.content : null) ??
+  "I'm here with you. Could you tell me more?";
 
+const aiMessage: Message = {
+  id: (Date.now() + 1).toString(),
+  content: aiMsgText,
+  sender: 'ai',
+  timestamp: new Date(),
+};
 
-      // Update state with the new AI message
-      setMessages(prev => [...prev, aiMessage]); 
+setMessages(prev => [...prev, aiMessage]);
+
     } catch (error) {
       console.error("Chat API error:", error);
       setMessages(prev => [...prev, {
