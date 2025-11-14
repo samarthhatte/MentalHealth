@@ -62,23 +62,30 @@ export function AIChat() {
 
     try {
       // 1. **CHANGE URL**: Target the correct endpoint
-      const response = await fetch("https://scaling-trust-ai.onrender.com/api/mental-support-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-     body: JSON.stringify({
-        message: userMessage.content
-      })
+const response = await fetch("https://scaling-trust-ai.onrender.com/api/mental-support-chat", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    message: userMessage,  // ⭐ must be "message"
+  }),
+});
 
-    });
 
 const data = await response.json();
-console.log("RAW AI RESPONSE:", data); // keep this for debugging
+console.log("RAW AI RESPONSE:", data);
 
 const aiMsgText =
-  data.message ??
-  data.response ??
-  data.output ??
-  (Array.isArray(data) ? data[0]?.content : null) ??
+  data?.message ||
+  data?.response ||
+  data?.output ||
+  data?.reply ||
+  data?.content ||
+  data?.text ||
+  data?.choices?.[0]?.message?.content ||
+  data?.choices?.[0]?.content ||
+  (Array.isArray(data) ? data[0]?.content : null) ||
   "I'm here with you. Could you tell me more?";
 
 const aiMessage: Message = {
@@ -88,7 +95,9 @@ const aiMessage: Message = {
   timestamp: new Date(),
 };
 
+
 setMessages(prev => [...prev, aiMessage]);
+
 
     } catch (error) {
       console.error("Chat API error:", error);
