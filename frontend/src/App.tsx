@@ -328,7 +328,7 @@ export default function App() {
           <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <Star className="w-4 h-4 text-yellow-500" />
-              <span>11 Wellness Tools</span>
+              <span>12 Wellness Tools</span>
             </div>
             <div className="flex items-center gap-2">
               <Target className="w-4 h-4 text-green-500" />
