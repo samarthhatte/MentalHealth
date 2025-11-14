@@ -16,3 +16,7 @@
     "express": "^5.1.0"
   }
 }
+"scripts": {
+  "start": "node backend/server/index.js",
+  "dev": "nodemon backend/server/index.js"
+}
