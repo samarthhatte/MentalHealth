@@ -7,33 +7,35 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
 
-// ✅ Serve MP3 files properly from the /sounds folder
+// Serve MP3 files
 app.use("/sounds", express.static(path.join(__dirname, "sounds")));
 
-// Test route to confirm backend is running
+// Health / test route
 app.get("/", (req, res) => {
-  res.send("🎧 Mental Health API is running... Use /sounds/<filename>.mp3 to access files.");
+  res.send("🎧 Mental Health API is running. Use /sounds/<filename>.mp3");
 });
 
-// Optional route for sound list
+// Dynamic sound list (PRODUCTION SAFE)
 app.get("/api/sounds", (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+
   const sounds = [
-    { id: "rain", name: "Rain", url: "http://localhost:5000/sounds/rain.mp3" },
-    { id: "ocean", name: "Ocean Waves", url: "http://localhost:5000/sounds/ocean.mp3" },
-    { id: "forest", name: "Forest", url: "http://localhost:5000/sounds/forest.mp3" },
-    { id: "fireplace", name: "Fireplace", url: "http://localhost:5000/sounds/fireplace.mp3" },
-    { id: "whitenoise", name: "White Noise", url: "http://localhost:5000/sounds/whitenoise.mp3" },
-    { id: "cafe", name: "Coffee Shop", url: "http://localhost:5000/sounds/cafe.mp3" },
+    { id: "rain", name: "Rain", url: `${baseUrl}/sounds/rain.mp3` },
+    { id: "ocean", name: "Ocean Waves", url: `${baseUrl}/sounds/ocean.mp3` },
+    { id: "forest", name: "Forest", url: `${baseUrl}/sounds/forest.mp3` },
+    { id: "fireplace", name: "Fireplace", url: `${baseUrl}/sounds/fireplace.mp3` },
+    { id: "whitenoise", name: "White Noise", url: `${baseUrl}/sounds/whitenoise.mp3` },
+    { id: "cafe", name: "Coffee Shop", url: `${baseUrl}/sounds/cafe.mp3` },
   ];
+
   res.json(sounds);
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Server running at: http://localhost:${PORT}`);
-  console.log(`🎵 Sound files available at: http://localhost:${PORT}/sounds/<filename>.mp3`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
