@@ -5,13 +5,16 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
+<<<<<<< HEAD
   
+=======
+>>>>>>> 2fe948b1a26be5c951a1d560f94c5f918f04e38e
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model user{
@@ -19,11 +22,15 @@ model user{
   name      String
   email     String   @unique
   password  String
+  role      String   @default("user")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   todos     todo[]
   chatMessages ChatMessage[]
-
+  sentAppointments Appointment[] @relation("UserAppointments")
+  receivedAppointments Appointment[] @relation("CounselorAppointments")
+  sentMessages Message[] @relation("SenderMessages")
+  receivedMessages Message[] @relation("ReceiverMessages")
 }
 
 model todo{
@@ -41,4 +48,32 @@ model ChatMessage {
 
   userId Int
   user   user @relation(fields: [userId], references: [id])
+}
+
+model Appointment {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  counselorId Int
+  date        DateTime
+  time        String   // e.g., "09:00 AM"
+  status      String   @default("pending") // pending, confirmed, completed, cancelled
+  sessionType String   @default("video") // video, phone, in-person
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      user @relation("UserAppointments", fields: [userId], references: [id])
+  counselor user @relation("CounselorAppointments", fields: [counselorId], references: [id])
+}
+
+model Message {
+  id          Int      @id @default(autoincrement())
+  senderId    Int
+  receiverId  Int
+  content     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  sender   user @relation("SenderMessages", fields: [senderId], references: [id])
+  receiver user @relation("ReceiverMessages", fields: [receiverId], references: [id])
 }
