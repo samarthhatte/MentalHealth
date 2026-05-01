@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -15,180 +15,239 @@ import {
   Video, 
   MessageCircle,
   Filter,
-  Heart
+  Heart,
+  Send,
+  Clock
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { io, Socket } from 'socket.io-client';
 
-interface Therapist {
-  id: string;
+interface Counselor {
+  id: number;
   name: string;
-  title: string;
-  specialties: string[];
-  location: string;
-  rating: number;
-  reviewCount: number;
-  price: string;
-  availability: string;
-  imageUrl: string;
-  verified: boolean;
-  sessionTypes: ('in-person' | 'video' | 'phone')[];
-  languages: string[];
-  experience: number;
-  approach: string;
+  email: string;
+  createdAt: string;
 }
 
-const mockTherapists: Therapist[] = [
-  {
-    id: '1',
-    name: 'Dr. Sarah Chen',
-    title: 'Licensed Clinical Psychologist',
-    specialties: ['Anxiety', 'Depression', 'Trauma', 'CBT'],
-    location: 'San Francisco, CA',
-    rating: 4.9,
-    reviewCount: 127,
-    price: '$120-150',
-    availability: 'Available this week',
-    imageUrl: '/therapists/sarah-chen.jpg',
-    verified: true,
-    sessionTypes: ['in-person', 'video'],
-    languages: ['English', 'Mandarin'],
-    experience: 8,
-    approach: 'Cognitive Behavioral Therapy, Mindfulness-based approaches'
-  },
-  {
-    id: '2',
-    name: 'Dr. Michael Rodriguez',
-    title: 'Licensed Marriage & Family Therapist',
-    specialties: ['Couples Therapy', 'Family Therapy', 'Communication'],
-    location: 'Los Angeles, CA',
-    rating: 4.8,
-    reviewCount: 89,
-    price: '$100-130',
-    availability: 'Next available: Monday',
-    imageUrl: '/therapists/michael-rodriguez.jpg',
-    verified: true,
-    sessionTypes: ['in-person', 'video', 'phone'],
-    languages: ['English', 'Spanish'],
-    experience: 12,
-    approach: 'Gottman Method, Emotionally Focused Therapy'
-  },
-  {
-    id: '3',
-    name: 'Dr. Emily Johnson',
-    title: 'Licensed Clinical Social Worker',
-    specialties: ['PTSD', 'Addiction', 'Group Therapy'],
-    location: 'New York, NY',
-    rating: 4.7,
-    reviewCount: 156,
-    price: '$80-110',
-    availability: 'Available this week',
-    imageUrl: '/therapists/emily-johnson.jpg',
-    verified: true,
-    sessionTypes: ['video', 'phone'],
-    languages: ['English'],
-    experience: 15,
-    approach: 'Trauma-informed care, EMDR, Dialectical Behavior Therapy'
-  },
-  {
-    id: '4',
-    name: 'Dr. David Kim',
-    title: 'Psychiatrist',
-    specialties: ['Medication Management', 'Bipolar Disorder', 'ADHD'],
-    location: 'Seattle, WA',
-    rating: 4.6,
-    reviewCount: 73,
-    price: '$200-250',
-    availability: 'Next available: Wednesday',
-    imageUrl: '/therapists/david-kim.jpg',
-    verified: true,
-    sessionTypes: ['in-person', 'video'],
-    languages: ['English', 'Korean'],
-    experience: 10,
-    approach: 'Psychopharmacology, Integrative psychiatry'
-  }
-];
+interface Appointment {
+  id: number;
+  date: string;
+  time: string;
+  status: string;
+  sessionType: string;
+  notes?: string;
+  counselor: {
+    name: string;
+    email: string;
+  };
+}
+
+interface Message {
+  id: number;
+  content: string;
+  createdAt: string;
+  isRead: boolean;
+  sender: {
+    name: string;
+  };
+  receiver: {
+    name: string;
+  };
+}
+
+const API_BASE = 'http://localhost:5000/api';
 
 export function TherapistConnect() {
-  const [therapists] = useState<Therapist[]>(mockTherapists);
-  const [searchLocation, setSearchLocation] = useState('');
-  const [selectedSpecialty, setSelectedSpecialty] = useState('');
-  const [selectedSessionType, setSelectedSessionType] = useState('');
-  const [priceRange, setPriceRange] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedTherapist, setSelectedTherapist] = useState<Therapist | null>(null);
+  const { user } = useAuth();
+  const [counselors, setCounselors] = useState<Counselor[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [selectedCounselor, setSelectedCounselor] = useState<Counselor | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'counselors' | 'appointments' | 'messages'>('counselors');
 
-  const allSpecialties = [...new Set(therapists.flatMap(t => t.specialties))];
-
-  const filteredTherapists = therapists.filter(therapist => {
-    if (searchLocation && !therapist.location.toLowerCase().includes(searchLocation.toLowerCase())) {
-      return false;
-    }
-    if (selectedSpecialty && !therapist.specialties.includes(selectedSpecialty)) {
-      return false;
-    }
-    if (selectedSessionType && !therapist.sessionTypes.includes(selectedSessionType as any)) {
-      return false;
-    }
-    return true;
+  // Booking form state
+  const [bookingForm, setBookingForm] = useState({
+    date: '',
+    time: '',
+    sessionType: 'video',
+    notes: ''
   });
 
-  const handleBooking = (therapist: Therapist) => {
-    setSelectedTherapist(therapist);
-    // In a real app, this would navigate to a booking system
+  useEffect(() => {
+    fetchCounselors();
+    if (user) {
+      fetchUserAppointments();
+      initializeSocket();
+    }
+  }, [user]);
+
+  const initializeSocket = () => {
+    if (!user) return;
+
+    const newSocket = io('http://localhost:5000');
+    setSocket(newSocket);
+
+    newSocket.emit('join', user.id);
+
+    newSocket.on('new_message', (message: Message) => {
+      setMessages(prev => [...prev, message]);
+    });
+
+    return () => {
+      newSocket.disconnect();
+    };
   };
 
-  if (selectedTherapist) {
+  const fetchCounselors = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/counselors`);
+      if (response.ok) {
+        const data = await response.json();
+        setCounselors(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch counselors:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUserAppointments = async () => {
+    if (!user) return;
+    try {
+      const response = await fetch(`${API_BASE}/appointments/user/${user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAppointments(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch appointments:', error);
+    }
+  };
+
+  const fetchMessages = async (counselorId: number) => {
+    if (!user) return;
+    try {
+      const response = await fetch(`${API_BASE}/messages/${user.id}/${counselorId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setMessages(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch messages:', error);
+    }
+  };
+
+  const handleBooking = (counselor: Counselor) => {
+    setSelectedCounselor(counselor);
+    setActiveTab('counselors');
+  };
+
+  const submitBooking = async () => {
+    if (!user || !selectedCounselor) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/appointments/book`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          counselorId: selectedCounselor.id,
+          ...bookingForm
+        })
+      });
+
+      if (response.ok) {
+        alert('Appointment booked successfully!');
+        setSelectedCounselor(null);
+        setBookingForm({ date: '', time: '', sessionType: 'video', notes: '' });
+        fetchUserAppointments();
+      } else {
+        alert('Failed to book appointment');
+      }
+    } catch (error) {
+      console.error('Booking error:', error);
+      alert('Failed to book appointment');
+    }
+  };
+
+  const handleMessage = async (counselor: Counselor) => {
+    setSelectedCounselor(counselor);
+    await fetchMessages(counselor.id);
+    setActiveTab('messages');
+  };
+
+  const sendMessage = async () => {
+    if (!user || !selectedCounselor || !newMessage.trim()) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderId: user.id,
+          receiverId: selectedCounselor.id,
+          content: newMessage
+        })
+      });
+
+      if (response.ok) {
+        const message = await response.json();
+        setMessages(prev => [...prev, message]);
+        setNewMessage('');
+      }
+    } catch (error) {
+      console.error('Send message error:', error);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  if (loading) {
+    return <div className="flex justify-center p-8">Loading...</div>;
+  }
+
+  if (selectedCounselor && activeTab === 'counselors') {
     return (
       <div className="max-w-4xl mx-auto">
         <Card className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2>Book Appointment</h2>
-            <Button variant="outline" onClick={() => setSelectedTherapist(null)}>
-              Back to Search
+            <h2>Book Appointment with {selectedCounselor.name}</h2>
+            <Button variant="outline" onClick={() => setSelectedCounselor(null)}>
+              Back to Counselors
             </Button>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Therapist Info */}
+            {/* Counselor Info */}
             <div className="lg:col-span-1">
               <Card className="p-4">
                 <div className="text-center mb-4">
                   <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 rounded-full flex items-center justify-center mx-auto mb-3">
                     <UserCheck className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <h3>{selectedTherapist.name}</h3>
-                  <p className="text-sm text-muted-foreground">{selectedTherapist.title}</p>
-                  {selectedTherapist.verified && (
-                    <Badge className="mt-2">✓ Verified</Badge>
-                  )}
-                </div>
-
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Star className="w-4 h-4 text-yellow-500" />
-                    <span>{selectedTherapist.rating} ({selectedTherapist.reviewCount} reviews)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
-                    <span>{selectedTherapist.location}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4" />
-                    <span>{selectedTherapist.price} per session</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    <span>{selectedTherapist.availability}</span>
-                  </div>
+                  <h3>{selectedCounselor.name}</h3>
+                  <p className="text-sm text-muted-foreground">Licensed Counselor</p>
+                  <Badge className="mt-2">✓ Verified</Badge>
                 </div>
 
                 <div className="mt-4">
-                  <h4 className="mb-2">Specialties</h4>
+                  <h4 className="mb-2">Available Session Types</h4>
                   <div className="flex flex-wrap gap-1">
-                    {selectedTherapist.specialties.map(specialty => (
-                      <Badge key={specialty} variant="outline" className="text-xs">
-                        {specialty}
-                      </Badge>
-                    ))}
+                    <Badge variant="outline" className="text-xs">
+                      <Video className="w-3 h-3 mr-1" />
+                      Video Call
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      <Phone className="w-3 h-3 mr-1" />
+                      Phone Call
+                    </Badge>
                   </div>
                 </div>
               </Card>
@@ -200,58 +259,42 @@ export function TherapistConnect() {
                 <h3 className="mb-4">Request Appointment</h3>
                 
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block mb-2">First Name</label>
-                      <Input placeholder="Your first name" />
-                    </div>
-                    <div>
-                      <label className="block mb-2">Last Name</label>
-                      <Input placeholder="Your last name" />
-                    </div>
+                  <div>
+                    <label className="block mb-2">Preferred Date</label>
+                    <Input
+                      type="date"
+                      value={bookingForm.date}
+                      onChange={(e) => setBookingForm(prev => ({ ...prev, date: e.target.value }))}
+                    />
                   </div>
 
                   <div>
-                    <label className="block mb-2">Email</label>
-                    <Input type="email" placeholder="your.email@example.com" />
-                  </div>
-
-                  <div>
-                    <label className="block mb-2">Phone Number</label>
-                    <Input type="tel" placeholder="(555) 123-4567" />
-                  </div>
-
-                  <div>
-                    <label className="block mb-2">Preferred Session Type</label>
-                    <Select>
+                    <label className="block mb-2">Preferred Time</label>
+                    <Select value={bookingForm.time} onValueChange={(value) => setBookingForm(prev => ({ ...prev, time: value }))}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Choose session type" />
+                        <SelectValue placeholder="Choose preferred time" />
                       </SelectTrigger>
                       <SelectContent>
-                        {selectedTherapist.sessionTypes.map(type => (
-                          <SelectItem key={type} value={type}>
-                            <div className="flex items-center gap-2">
-                              {type === 'video' && <Video className="w-4 h-4" />}
-                              {type === 'phone' && <Phone className="w-4 h-4" />}
-                              {type === 'in-person' && <UserCheck className="w-4 h-4" />}
-                              {type.charAt(0).toUpperCase() + type.slice(1).replace('-', ' ')}
-                            </div>
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="09:00 AM">9:00 AM</SelectItem>
+                        <SelectItem value="10:00 AM">10:00 AM</SelectItem>
+                        <SelectItem value="11:00 AM">11:00 AM</SelectItem>
+                        <SelectItem value="02:00 PM">2:00 PM</SelectItem>
+                        <SelectItem value="03:00 PM">3:00 PM</SelectItem>
+                        <SelectItem value="04:00 PM">4:00 PM</SelectItem>
+                        <SelectItem value="05:00 PM">5:00 PM</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <label className="block mb-2">Preferred Time</label>
-                    <Select>
+                    <label className="block mb-2">Session Type</label>
+                    <Select value={bookingForm.sessionType} onValueChange={(value) => setBookingForm(prev => ({ ...prev, sessionType: value }))}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Choose preferred time" />
+                        <SelectValue placeholder="Choose session type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="morning">Morning (9 AM - 12 PM)</SelectItem>
-                        <SelectItem value="afternoon">Afternoon (12 PM - 5 PM)</SelectItem>
-                        <SelectItem value="evening">Evening (5 PM - 8 PM)</SelectItem>
+                        <SelectItem value="video">Video Call</SelectItem>
+                        <SelectItem value="phone">Phone Call</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -260,21 +303,64 @@ export function TherapistConnect() {
                     <label className="block mb-2">What would you like to work on? (Optional)</label>
                     <Textarea 
                       placeholder="Briefly describe what you'd like to focus on in therapy..."
+                      value={bookingForm.notes}
+                      onChange={(e) => setBookingForm(prev => ({ ...prev, notes: e.target.value }))}
                       className="min-h-24"
                     />
                   </div>
 
-                  <div className="flex gap-3">
-                    <Button className="flex-1">
-                      Request Appointment
-                    </Button>
-                    <Button variant="outline">
-                      <MessageCircle className="w-4 h-4 mr-2" />
-                      Message
-                    </Button>
-                  </div>
+                  <Button onClick={submitBooking} className="w-full">
+                    Request Appointment
+                  </Button>
                 </div>
               </Card>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (activeTab === 'messages' && selectedCounselor) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2>Chat with {selectedCounselor.name}</h2>
+            <Button variant="outline" onClick={() => { setSelectedCounselor(null); setActiveTab('counselors'); }}>
+              Back to Counselors
+            </Button>
+          </div>
+
+          <div className="h-96 flex flex-col">
+            <div className="flex-1 overflow-y-auto mb-4 p-4 border rounded-lg">
+              {messages.map((message) => (
+                <div key={message.id} className={`mb-3 ${message.sender.name === user?.name ? 'text-right' : 'text-left'}`}>
+                  <div className={`inline-block p-3 rounded-lg max-w-xs ${
+                    message.sender.name === user?.name 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-200 dark:bg-gray-700'
+                  }`}>
+                    <p className="text-sm">{message.content}</p>
+                    <p className="text-xs opacity-70 mt-1">
+                      {new Date(message.createdAt).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                placeholder="Type your message..."
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                className="flex-1"
+              />
+              <Button onClick={sendMessage}>
+                <Send className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </Card>
@@ -288,206 +374,143 @@ export function TherapistConnect() {
       <Card className="p-6">
         <h2 className="flex items-center gap-2 mb-4">
           <UserCheck className="w-5 h-5" />
-          Find a Therapist
+          Therapist Connect
         </h2>
         <p className="text-muted-foreground">
-          Connect with licensed mental health professionals who can provide personalized support and treatment.
+          Connect with licensed counselors for personalized mental health support.
         </p>
       </Card>
 
-      {/* Search and Filters */}
-      <Card className="p-6">
-        <div className="flex flex-col gap-4">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <Input
-                placeholder="Enter city, state, or zip code"
-                value={searchLocation}
-                onChange={(e) => setSearchLocation(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <Button 
-              variant="outline" 
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              Filters
-            </Button>
-          </div>
-
-          {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
-              <div>
-                <label className="block mb-2">Specialty</label>
-                <Select value={selectedSpecialty} onValueChange={setSelectedSpecialty}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Any specialty" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Any specialty</SelectItem>
-                    {allSpecialties.map(specialty => (
-                      <SelectItem key={specialty} value={specialty}>
-                        {specialty}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <label className="block mb-2">Session Type</label>
-                <Select value={selectedSessionType} onValueChange={setSelectedSessionType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Any session type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Any session type</SelectItem>
-                    <SelectItem value="in-person">In-person</SelectItem>
-                    <SelectItem value="video">Video call</SelectItem>
-                    <SelectItem value="phone">Phone call</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <label className="block mb-2">Price Range</label>
-                <Select value={priceRange} onValueChange={setPriceRange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Any price range" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Any price range</SelectItem>
-                    <SelectItem value="under-100">Under $100</SelectItem>
-                    <SelectItem value="100-150">$100 - $150</SelectItem>
-                    <SelectItem value="150-200">$150 - $200</SelectItem>
-                    <SelectItem value="over-200">Over $200</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Therapist Results */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredTherapists.map(therapist => (
-          <Card key={therapist.id} className="p-6 hover:shadow-md transition-shadow">
-            <div className="flex gap-4 mb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 rounded-full flex items-center justify-center flex-shrink-0">
-                <UserCheck className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3>{therapist.name}</h3>
-                  {therapist.verified && (
-                    <Badge variant="secondary" className="text-xs">✓ Verified</Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground mb-2">{therapist.title}</p>
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1">
-                    <Star className="w-3 h-3 text-yellow-500" />
-                    <span>{therapist.rating}</span>
-                    <span className="text-muted-foreground">({therapist.reviewCount})</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    <span className="text-muted-foreground">{therapist.location}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 mb-4">
-              <div>
-                <h4 className="text-sm mb-1">Specialties</h4>
-                <div className="flex flex-wrap gap-1">
-                  {therapist.specialties.map(specialty => (
-                    <Badge key={specialty} variant="outline" className="text-xs">
-                      {specialty}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="w-3 h-3" />
-                  <span>{therapist.price}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-3 h-3" />
-                  <span className="text-muted-foreground">{therapist.availability}</span>
-                </div>
-              </div>
-
-              <div className="flex gap-1">
-                {therapist.sessionTypes.map(type => (
-                  <Badge key={type} variant="outline" className="text-xs">
-                    {type === 'video' && <Video className="w-3 h-3 mr-1" />}
-                    {type === 'phone' && <Phone className="w-3 h-3 mr-1" />}
-                    {type === 'in-person' && <UserCheck className="w-3 h-3 mr-1" />}
-                    {type.replace('-', ' ')}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button onClick={() => handleBooking(therapist)} className="flex-1">
-                Book Appointment
-              </Button>
-              <Button variant="outline" size="sm">
-                <Heart className="w-4 h-4" />
-              </Button>
-            </div>
-          </Card>
-        ))}
+      {/* Tabs */}
+      <div className="flex gap-4 mb-6">
+        <Button 
+          variant={activeTab === 'counselors' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('counselors')}
+        >
+          Find Counselors
+        </Button>
+        <Button 
+          variant={activeTab === 'appointments' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('appointments')}
+        >
+          My Appointments ({appointments.length})
+        </Button>
       </div>
 
-      {filteredTherapists.length === 0 && (
-        <Card className="p-12 text-center">
-          <UserCheck className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="mb-2">No therapists found</h3>
-          <p className="text-muted-foreground">
-            Try adjusting your search criteria or location to find more results.
-          </p>
-        </Card>
+      {activeTab === 'counselors' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {counselors.map((counselor) => (
+            <Card key={counselor.id} className="p-6 hover:shadow-md transition-shadow">
+              <div className="flex gap-4 mb-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 rounded-full flex items-center justify-center flex-shrink-0">
+                  <UserCheck className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3>{counselor.name}</h3>
+                    <Badge variant="secondary" className="text-xs">✓ Verified</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">Licensed Counselor</p>
+                  <div className="text-sm">
+                    <p>Experience: {Math.floor((Date.now() - new Date(counselor.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 365))} years</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button onClick={() => handleBooking(counselor)} className="flex-1">
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Book Appointment
+                </Button>
+                <Button variant="outline" onClick={() => handleMessage(counselor)}>
+                  <MessageCircle className="w-4 h-4" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'appointments' && (
+        <div className="space-y-4">
+          {appointments.length === 0 ? (
+            <Card className="p-12 text-center">
+              <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="mb-2">No appointments yet</h3>
+              <p className="text-muted-foreground">
+                Book your first appointment with a counselor to get started.
+              </p>
+            </Card>
+          ) : (
+            appointments.map((appointment) => (
+              <Card key={appointment.id} className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 rounded-full flex items-center justify-center">
+                      <UserCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{appointment.counselor.name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(appointment.date)} at {appointment.time}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {appointment.sessionType} session
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <Badge variant={appointment.status === 'confirmed' ? 'default' : 'secondary'}>
+                      {appointment.status}
+                    </Badge>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      <Clock className="w-3 h-3 inline mr-1" />
+                      {appointment.sessionType}
+                    </p>
+                  </div>
+                </div>
+                {appointment.notes && (
+                  <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <p className="text-sm">{appointment.notes}</p>
+                  </div>
+                )}
+              </Card>
+            ))
+          )}
+        </div>
       )}
 
       {/* Information */}
       <Card className="p-6">
-        <h3 className="mb-4">Important Information</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-          <div>
-            <h4 className="mb-2">What to Expect</h4>
-            <ul className="space-y-1 text-muted-foreground">
-              <li>• Initial consultation to assess your needs</li>
-              <li>• Personalized treatment plan development</li>
-              <li>• Regular sessions based on your schedule</li>
-              <li>• Progress monitoring and adjustments</li>
-              <li>• Confidential and professional care</li>
-            </ul>
+        <h3 className="mb-4">How It Works</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+          <div className="text-center">
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-3">
+              <UserCheck className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h4 className="mb-2">Find a Counselor</h4>
+            <p className="text-muted-foreground">
+              Browse verified counselors and read their profiles to find the right match for your needs.
+            </p>
           </div>
-          <div>
-            <h4 className="mb-2">Insurance & Payment</h4>
-            <ul className="space-y-1 text-muted-foreground">
-              <li>• Many therapists accept insurance</li>
-              <li>• Sliding scale fees may be available</li>
-              <li>• HSA/FSA eligible expenses</li>
-              <li>• Payment plans often available</li>
-              <li>• Check with your insurance provider</li>
-            </ul>
+          <div className="text-center">
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Calendar className="w-6 h-6 text-green-600 dark:text-green-400" />
+            </div>
+            <h4 className="mb-2">Book Appointment</h4>
+            <p className="text-muted-foreground">
+              Schedule a convenient time for your session through video call or phone.
+            </p>
           </div>
-        </div>
-        
-        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            💡 <strong>Note:</strong> This is a demonstration interface. In a real application, 
-            therapist profiles would be verified and appointments would be managed through a secure booking system.
-          </p>
+          <div className="text-center">
+            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center mx-auto mb-3">
+              <MessageCircle className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            </div>
+            <h4 className="mb-2">Connect & Communicate</h4>
+            <p className="text-muted-foreground">
+              Message your counselor anytime and attend sessions for ongoing support.
+            </p>
+          </div>
         </div>
       </Card>
     </div>
