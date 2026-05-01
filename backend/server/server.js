@@ -18,7 +18,7 @@ const io = new Server(server, {
         methods: ["GET", "POST"]
     }
 });
-const PORT = 5000;
+const PORT = process.env.PORT ;
 const prisma = new PrismaClient();
 
 app.use(cors());

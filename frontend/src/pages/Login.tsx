@@ -28,11 +28,7 @@ export default function Login() {
     }
   };
 
-  const demoAccounts = [
-    { email: 'admin@test.com', password: 'admin123', role: 'Admin' },
-    { email: 'counselor@test.com', password: 'counselor123', role: 'Counselor' },
-    { email: 'user@test.com', password: 'user123', role: 'User' },
-  ];
+ 
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-blue-950 dark:via-purple-950 dark:to-pink-950 p-4">
