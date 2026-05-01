@@ -1,11 +1,15 @@
 {
+    "type": "module",
     "scripts": {
-        "start": "cd server && npm start"
+        "start": "node server.js"
     },
     "devDependencies": {
         "prisma": "^6.19.0"
     },
     "dependencies": {
-        "@prisma/client": "^6.19.0"
+        "@prisma/client": "^6.19.0",
+        "express": "^4.21.0",
+        "cors": "^2.8.5",
+        "socket.io": "^4.8.0"
     }
 }

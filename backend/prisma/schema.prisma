@@ -5,16 +5,11 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-<<<<<<< HEAD
-  
-=======
->>>>>>> 2fe948b1a26be5c951a1d560f94c5f918f04e38e
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
 }
 
 model user{
