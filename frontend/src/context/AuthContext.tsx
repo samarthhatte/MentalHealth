@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export type UserRole = 'admin' | 'user' | 'counselor';
 
@@ -73,12 +73,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { user: null, error: data?.error || 'Invalid email or password.' };
       }
 
-      const userData: User = {
-        id: String(data.id),
-        name: data.name,
-        email: data.email,
-        role: normalizeRole(data.role),
-      };
+// For Login
+const userData: User = {
+  id: String(data.user.id),   // ✅ Access the nested user object
+  name: data.user.name,
+  email: data.user.email,
+  role: normalizeRole(data.user.role),
+};
 
       setUser(userData);
       localStorage.setItem('mentalHealthUser', JSON.stringify(userData));
@@ -102,12 +103,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { user: null, error: data?.error || 'Unable to create account.' };
       }
 
-      const userData: User = {
-        id: String(data.id),
-        name: data.name,
-        email: data.email,
-        role: normalizeRole(data.role),
-      };
+// For Signup
+const userData: User = {
+  id: String(data.user.id),   // ✅ Access the nested user object
+  name: data.user.name,
+  email: data.user.email,
+  role: normalizeRole(data.user.role),
+};
 
       setUser(userData);
       localStorage.setItem('mentalHealthUser', JSON.stringify(userData));
