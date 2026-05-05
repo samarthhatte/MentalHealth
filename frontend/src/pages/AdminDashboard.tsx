@@ -430,7 +430,7 @@ const handleChangePassword = async () => {
                     </div>
                     <div className="p-4 border rounded-lg">
                       <p className="text-sm text-muted-foreground">Admin Email</p>
-                      <p className="font-medium">admin@test.com</p>
+                      <p className="font-medium">{user?.email || 'Loading...'}</p>
                     </div>
                   </div>
                 </div>
