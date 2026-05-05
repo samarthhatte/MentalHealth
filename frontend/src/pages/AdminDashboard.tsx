@@ -89,7 +89,7 @@ export default function AdminDashboard() {
       const [statsRes, usersRes, counselorsRes, activityRes, healthRes] = await Promise.all([
         fetch(`${API_BASE}/api/admin/stats`),
         fetch(`${API_BASE}/api/admin/users`),
-        fetch(`${API_BASE}/api/counselors`),
+        fetch(`${API_BASE}/api/admin/counselors`),
         fetch(`${API_BASE}/api/admin/activity`),
         fetch(`${API_BASE}/api/admin/health`)
       ]);

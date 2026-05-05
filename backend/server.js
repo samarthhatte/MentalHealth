@@ -63,6 +63,40 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+// GET ALL USERS (Role: user)
+app.get("/api/admin/users", async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { role: "user" },
+      include: {
+        _count: {
+          select: { todos: true, chatMessages: true }
+        }
+      }
+    });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// GET ALL COUNSELORS (Role: counselor)
+app.get("/api/admin/counselors", async (req, res) => {
+  try {
+    const counselors = await prisma.user.findMany({
+      where: { role: "counselor" },
+      include: {
+        _count: {
+          select: { todos: true, chatMessages: true }
+        }
+      }
+    });
+    res.json(counselors);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch counselors" });
+  }
+});
+
 // --- OTHER ROUTES ---
 
 // SAVE CHAT MESSAGE
