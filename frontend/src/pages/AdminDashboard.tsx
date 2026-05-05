@@ -70,7 +70,7 @@ export default function AdminDashboard() {
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [health, setHealth] = useState<SystemHealth | null>(null);
 
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+const API_BASE = ''; // The proxy in vite.config.ts handles the 'http://localhost:5000' part
 
   async function parseJsonSafe(response: Response) {
     const text = await response.text();
@@ -118,6 +118,38 @@ export default function AdminDashboard() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
+
+const handleChangePassword = async () => {
+  if (!user?.id) return; // 👈 Safety check
+
+  const newPassword = prompt("Enter new password:");
+  
+  if (!newPassword || newPassword.length < 6) {
+    alert("Password must be at least 6 characters.");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/change-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        newPassword, 
+        adminId: user.id // 👈 Pass the logged-in user's ID
+      }),
+    });
+
+    if (response.ok) {
+      alert("Your password has been updated successfully!");
+    } else {
+      const data = await response.json();
+      alert(data.error || "Update failed.");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    alert("Connection error.");
+  }
+};
 
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
@@ -402,10 +434,12 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <h4 className="font-medium">Security</h4>
-                  <Button variant="outline">Change Admin Password</Button>
-                </div>
+<div className="space-y-2">
+  <h4 className="font-medium">Security</h4>
+  <Button variant="outline" onClick={handleChangePassword}>
+    Change Admin Password
+  </Button>
+</div>
               </div>
             </Card>
           </TabsContent>

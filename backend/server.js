@@ -132,6 +132,38 @@ app.get("/api/chat/history/:userId", async (req, res) => {
   }
 });
 
+// GET ADMIN DASHBOARD STATS
+app.get("/api/admin/stats", async (req, res) => {
+  try {
+    const [totalUsers, totalMessages, totalTodos] = await Promise.all([
+      prisma.user.count(),
+      prisma.chatMessage.count(),
+      prisma.todo.count() // Ensure you have a 'todo' model in your schema
+    ]);
+
+    // Calculating 'New Users This Week' (Last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const newUsersThisWeek = await prisma.user.count({
+      where: {
+        createdAt: { gte: sevenDaysAgo }
+      }
+    });
+
+    res.json({
+      totalUsers,
+      totalMessages,
+      totalTodos,
+      activeToday: Math.floor(totalUsers * 0.4), // Placeholder for active users
+      newUsersThisWeek,
+      messagesThisWeek: totalMessages // Placeholder or add date filter logic
+    });
+  } catch (error) {
+    console.error("Admin stats error:", error);
+    res.status(500).json({ error: "Failed to fetch admin statistics" });
+  }
+});
 
 // GET USER OVERVIEW STATS (Fixes the dashboard 404s)
 app.get("/api/user/overview", async (req, res) => {
@@ -246,4 +278,22 @@ app.get("/api/admin/health", (req, res) => {
     database: "Connected",
     api: "Online"
   });
+});
+
+// CHANGE ADMIN PASSWORD
+// CHANGE PASSWORD BY ID
+app.post("/api/admin/change-password", async (req, res) => {
+  const { newPassword, adminId } = req.body; // 👈 Receive the specific ID
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id: parseInt(adminId) }, // 👈 Target specific user
+      data: { password: newPassword }
+    });
+
+    res.json({ message: "Password updated successfully for " + updatedUser.name });
+  } catch (error) {
+    console.error("Password update error:", error);
+    res.status(500).json({ error: "User not found or database error" });
+  }
 });
