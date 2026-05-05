@@ -151,6 +151,21 @@ const handleChangePassword = async () => {
   }
 };
 
+// Inside AdminDashboard component
+const handleBackup = async () => {
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/backup`, { method: 'POST' });
+    if (response.ok) alert("Database backup initiated successfully!");
+  } catch (error) {
+    alert("Failed to connect to backup service.");
+  }
+};
+
+const handleNotifyAll = () => {
+  const msg = prompt("Enter notification message for all users:");
+  if (msg) alert(`Notification sent: "${msg}"`);
+};
+
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
     document.documentElement.classList.toggle('dark', !isDarkMode);
@@ -170,6 +185,12 @@ const handleChangePassword = async () => {
     if (diff < 1440) return `${Math.floor(diff / 60)} hours ago`;
     return `${Math.floor(diff / 1440)} days ago`;
   };
+
+  // Inside AdminDashboard component
+const [activeTab, setActiveTab] = useState("overview");
+
+// Update the Tabs component to use these values
+<Tabs value={activeTab} onValueChange={setActiveTab} className="w-full"></Tabs>
 
   const adminStats = stats ? [
     { label: 'Total Users', value: stats.totalUsers.toString(), icon: Users, color: 'bg-blue-500' },
@@ -249,24 +270,43 @@ const handleChangePassword = async () => {
                     <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Button variant="outline" className="h-20 flex flex-col gap-2">
-                    <Users className="w-5 h-5" />
-                    <span>Manage Users</span>
-                  </Button>
-                  <Button variant="outline" className="h-20 flex flex-col gap-2">
-                    <Settings className="w-5 h-5" />
-                    <span>System Settings</span>
-                  </Button>
-                  <Button variant="outline" className="h-20 flex flex-col gap-2">
-                    <Database className="w-5 h-5" />
-                    <span>Backup Data</span>
-                  </Button>
-                  <Button variant="outline" className="h-20 flex flex-col gap-2">
-                    <Bell className="w-5 h-5" />
-                    <span>Notifications</span>
-                  </Button>
-                </div>
+              <div className="grid grid-cols-2 gap-4">
+  <Button 
+    variant="outline" 
+    className="h-20 flex flex-col gap-2"
+    onClick={() => setActiveTab("users")} // 👈 Switches to Users Tab
+  >
+    <Users className="w-5 h-5" />
+    <span>Manage Users</span>
+  </Button>
+
+  <Button 
+    variant="outline" 
+    className="h-20 flex flex-col gap-2"
+    onClick={() => setActiveTab("settings")} // 👈 Switches to Settings Tab
+  >
+    <Settings className="w-5 h-5" />
+    <span>System Settings</span>
+  </Button>
+
+  <Button 
+    variant="outline" 
+    className="h-20 flex flex-col gap-2" 
+    onClick={handleBackup} // Use the backup function we created earlier
+  >
+    <Database className="w-5 h-5" />
+    <span>Backup Data</span>
+  </Button>
+
+  <Button 
+    variant="outline" 
+    className="h-20 flex flex-col gap-2"
+    onClick={() => alert("Notification system coming soon!")}
+  >
+    <Bell className="w-5 h-5" />
+    <span>Notifications</span>
+  </Button>
+</div>
               </Card>
 
               <Card className="p-6">

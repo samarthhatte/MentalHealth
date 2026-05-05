@@ -6,6 +6,7 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { Calendar, Plus, Search, Edit, Trash2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext'; // Import your Auth context
 
 interface JournalEntry {
   id: string;
@@ -35,60 +36,101 @@ const moodColors = {
 };
 
 export function Journal() {
+  const { user } = useAuth(); // Get current logged in user
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [isWriting, setIsWriting] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [newEntry, setNewEntry] = useState({
-    title: '',
-    content: '',
-    mood: 'neutral' as const,
-    tags: ''
-  });
+const [newEntry, setNewEntry] = useState<{
+  title: string;
+  content: string;
+  mood: JournalEntry['mood']; // 👈 Use the interface type here
+  tags: string;
+}>({
+  title: '',
+  content: '',
+  mood: 'neutral',
+  tags: ''
+});
 
-  useEffect(() => {
-    // Load entries from localStorage
-    const savedEntries = localStorage.getItem('journalEntries');
-    if (savedEntries) {
-      setEntries(JSON.parse(savedEntries).map((entry: any) => ({
-        ...entry,
-        date: new Date(entry.date)
-      })));
-    }
-  }, []);
+const API_BASE = ''; // Proxy handles the base URL
 
-  const saveEntries = (updatedEntries: JournalEntry[]) => {
-    setEntries(updatedEntries);
-    localStorage.setItem('journalEntries', JSON.stringify(updatedEntries));
-  };
+// Inside your Journal component
+useEffect(() => {
+  if (user?.id) {
+    fetch(`${API_BASE}/api/journal/${user.id}`)
+      .then(res => res.json())
+      .then(data => {
+        // 🛡️ Safety check: Ensure data is an array
+        const entriesArray = Array.isArray(data) ? data : [];
+        
+        setEntries(entriesArray.map((entry: any) => ({
+          ...entry,
+          date: new Date(entry.createdAt),
+          // 🛡️ FIX: Convert the comma-separated String back to an Array
+          tags: typeof entry.tags === 'string' 
+            ? entry.tags.split(',').map((t: string) => t.trim()).filter(Boolean) 
+            : []
+        })));
+      })
+      .catch(err => console.error("Error loading journal:", err));
+  }
+}, [user]);
 
-  const saveEntry = () => {
-    if (!newEntry.title.trim() || !newEntry.content.trim()) return;
+  // 2. Save or Update Entry in DB[cite: 2]
+  const saveEntry = async () => {
+    if (!newEntry.title.trim() || !newEntry.content.trim() || !user?.id) return;
 
-    const entry: JournalEntry = {
-      id: editingEntry ? editingEntry.id : Date.now().toString(),
+    const entryData = {
       title: newEntry.title,
       content: newEntry.content,
       mood: newEntry.mood,
-      date: editingEntry ? editingEntry.date : new Date(),
-      tags: newEntry.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+      tags: newEntry.tags, // Send as string, handle parsing on server or here
+      userId: user.id
     };
 
-    if (editingEntry) {
-      const updatedEntries = entries.map(e => e.id === entry.id ? entry : e);
-      saveEntries(updatedEntries);
-      setEditingEntry(null);
-    } else {
-      saveEntries([entry, ...entries]);
-    }
+    try {
+      const url = editingEntry 
+        ? `${API_BASE}/api/journal/update/${editingEntry.id}` 
+        : `${API_BASE}/api/journal/save`;
+      
+      const response = await fetch(url, {
+        method: editingEntry ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entryData),
+      });
 
-    setNewEntry({ title: '', content: '', mood: 'neutral', tags: '' });
-    setIsWriting(false);
+      if (response.ok) {
+        const savedEntry = await response.json();
+        // Refresh local state[cite: 5]
+        if (editingEntry) {
+          setEntries(entries.map(e => e.id === editingEntry.id ? { ...savedEntry, date: new Date(savedEntry.createdAt) } : e));
+        } else {
+          setEntries([{ ...savedEntry, date: new Date(savedEntry.createdAt) }, ...entries]);
+        }
+        resetForm();
+      }
+    } catch (error) {
+      console.error("Error saving entry:", error);
+    }
   };
 
-  const deleteEntry = (id: string) => {
-    const updatedEntries = entries.filter(e => e.id !== id);
-    saveEntries(updatedEntries);
+  // 3. Delete from DB[cite: 2]
+  const deleteEntry = async (id: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/journal/delete/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setEntries(entries.filter(e => e.id !== id));
+      }
+    } catch (error) {
+      console.error("Error deleting entry:", error);
+    }
+  };
+
+  const resetForm = () => {
+    setNewEntry({ title: '', content: '', mood: 'neutral', tags: '' });
+    setIsWriting(false);
+    setEditingEntry(null);
   };
 
   const startEdit = (entry: JournalEntry) => {
@@ -241,14 +283,14 @@ export function Journal() {
                     </span>
                   </div>
                   
-                  {entry.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {entry.tags.map((tag, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
+{Array.isArray(entry.tags) && entry.tags.length > 0 && (
+  <div className="flex flex-wrap gap-1 mt-2">
+    {entry.tags.map((tag, index) => (
+      <Badge key={index} variant="outline" className="text-xs">
+        {tag}
+      </Badge>
+    ))}
+  </div>
                   )}
                 </div>
               ))}

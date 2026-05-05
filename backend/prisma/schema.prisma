@@ -27,6 +27,7 @@ model user{
   receivedAppointments Appointment[] @relation("CounselorAppointments")
   sentMessages Message[] @relation("SenderMessages")
   receivedMessages Message[] @relation("ReceiverMessages")
+  journals  Journal[]
 }
 
 model todo{
@@ -73,3 +74,17 @@ model Message {
   sender   user @relation("SenderMessages", fields: [senderId], references: [id])
   receiver user @relation("ReceiverMessages", fields: [receiverId], references: [id])
 }
+
+model Journal {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  mood      String
+  tags      String?  // Storing as a comma-separated string for simplicity
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    Int
+  user      user     @relation(fields: [userId], references: [id])
+}
+
