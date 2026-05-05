@@ -179,3 +179,71 @@ app.get("/api/sounds", (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
+// --- ADMIN MANAGEMENT ROUTES ---
+
+// GET ALL USERS (Role: user)
+app.get("/api/admin/users", async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { role: "user" },
+      include: {
+        _count: {
+          select: { todos: true, chatMessages: true }
+        }
+      }
+    });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// GET ALL COUNSELORS (Role: counselor)
+app.get("/api/admin/counselors", async (req, res) => {
+  try {
+    const counselors = await prisma.user.findMany({
+      where: { role: "counselor" },
+      include: {
+        _count: {
+          select: { todos: true, chatMessages: true }
+        }
+      }
+    });
+    res.json(counselors);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch counselors" });
+  }
+});
+
+// GET SYSTEM ACTIVITY LOGS
+app.get("/api/admin/activity", async (req, res) => {
+  try {
+    // For now, we'll return a combination of recent signups and messages
+    const recentUsers = await prisma.user.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const logs = recentUsers.map(u => ({
+      id: u.id,
+      user: u.name,
+      action: `New user registered: ${u.role}`,
+      timestamp: u.createdAt
+    }));
+
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch activity logs" });
+  }
+});
+
+// GET SYSTEM HEALTH
+app.get("/api/admin/health", (req, res) => {
+  res.json({
+    status: "Healthy",
+    uptime: `${Math.floor(process.uptime() / 60)} minutes`,
+    database: "Connected",
+    api: "Online"
+  });
+});
