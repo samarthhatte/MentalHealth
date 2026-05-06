@@ -28,20 +28,21 @@ interface UserData {
   email: string;
   createdAt: string;
   updatedAt: string;
-  _count: {
+_count: {
     todos: number;
-    chatMessages: number;
+    messages: number; // Changed from messages[cite: 16]
   };
+
   todos: Array<{
     id: number;
     title: string;
     completed: boolean;
     createdAt: string;
   }>;
-  chatMessages: Array<{
+messages: Array<{ // 🛡️ ADD: This replaces messages
     id: number;
     content: string;
-    role: string;
+    senderId: number;
     createdAt: string;
   }>;
 }
@@ -98,17 +99,27 @@ export default function CounselorDashboard() {
           email: 'john@example.com',
           createdAt: '2024-01-15T00:00:00.000Z',
           updatedAt: '2024-01-20T00:00:00.000Z',
-          _count: { todos: 5, chatMessages: 23 },
+          _count: { todos: 5, messages: 23 },
           todos: [
             { id: 1, title: 'Practice breathing exercises', completed: true, createdAt: '2024-01-20T00:00:00.000Z' },
             { id: 2, title: 'Journal about feelings', completed: false, createdAt: '2024-01-19T00:00:00.000Z' }
           ],
-          chatMessages: [
-            { id: 1, content: 'I\'m feeling anxious today', role: 'user', createdAt: '2024-01-20T00:00:00.000Z' },
-            { id: 2, content: 'That\'s completely normal. Let\'s try some breathing exercises.', role: 'assistant', createdAt: '2024-01-20T00:00:00.000Z' }
-          ]
-        }
-      ]);
+ messages: [
+      { 
+        id: 1, 
+        content: "I'm feeling anxious today", 
+        senderId: 1, // 🛡️ Use a Number, not a String
+        createdAt: '2024-01-20T00:00:00.000Z' 
+      },
+      { 
+        id: 2, 
+        content: "That's completely normal. Let's try some breathing exercises.", 
+        senderId: Number(user?.id) || 999, // 🛡️ Convert user.id to a Number[cite: 15]
+        createdAt: '2024-01-20T00:00:00.000Z' 
+      }
+    ]
+  }
+]);
       setStats({
         totalAppointments: 12,
         upcomingAppointments: 3,
@@ -233,7 +244,7 @@ export default function CounselorDashboard() {
                       <div className="flex items-center gap-4">
                         <div className="text-right text-sm">
                           <p className="font-medium">{u._count.todos} todos</p>
-                          <p className="text-muted-foreground">{u._count.chatMessages} messages</p>
+                          <p className="text-muted-foreground">{u._count.messages} messages</p>
                         </div>
                         <Button variant="outline" size="sm" onClick={() => setSelectedUser(u)}>
                           <Eye className="w-4 h-4 mr-2" />
@@ -288,7 +299,7 @@ export default function CounselorDashboard() {
                     <div className="space-y-3">
                       <div className="p-3 bg-muted rounded-lg">
                         <p className="text-sm text-muted-foreground">Total Messages</p>
-                        <p className="text-2xl font-bold">{selectedUser._count.chatMessages}</p>
+                        <p className="text-2xl font-bold">{selectedUser._count.messages}</p>
                       </div>
                       <div className="p-3 bg-muted rounded-lg">
                         <p className="text-sm text-muted-foreground">Completed Todos</p>
@@ -311,22 +322,28 @@ export default function CounselorDashboard() {
 
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Chat History</h3>
-                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                      {selectedUser.chatMessages.slice(0, 10).map((message) => (
-                        <div key={message.id} className={`p-3 rounded-lg ${message.role === 'user' ? 'bg-blue-50 dark:bg-blue-950' : 'bg-green-50 dark:bg-green-950'}`}>
-                          <div className="flex items-center gap-2 mb-1">
-                            <User className="w-4 h-4" />
-                            <span className="text-xs text-muted-foreground">
-                              {message.role === 'user' ? selectedUser.name : 'AI Assistant'}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(message.createdAt).toLocaleString()}
-                            </span>
-                          </div>
-                          <p className="text-sm">{message.content}</p>
-                        </div>
-                      ))}
-                    </div>
+{/* Inside the User Details Modal - Chat History section */}
+<div className="space-y-3 max-h-96 overflow-y-auto">
+  {selectedUser.messages?.map((message) => (
+    <div 
+    key={message.id} 
+    className={`p-3 rounded-lg ${
+      // Convert user.id to Number to match message.senderId[cite: 15]
+      message.senderId === Number(user?.id) ? 'bg-green-50' : 'bg-blue-50'
+    }`}
+  >
+    <div className="flex items-center gap-2 mb-1">
+      <span className="text-xs font-bold">
+        {message.senderId === Number(user?.id) ? 'You' : selectedUser.name}
+      </span>
+        <span className="text-xs text-muted-foreground">
+          {new Date(message.createdAt).toLocaleString()}
+        </span>
+      </div>
+      <p className="text-sm">{message.content}</p>
+    </div>
+  ))}
+</div>
                   </div>
                 </div>
               </div>

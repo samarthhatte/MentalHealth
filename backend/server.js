@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import http from "http";
+import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 
@@ -10,6 +12,23 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "http://localhost:3000" } // Your frontend URL
+});
+
+io.on("connection", (socket) => {
+  socket.on("join", (userId) => {
+    socket.join(`user_${userId}`);
+    console.log(`User ${userId} joined their real-time chat room`);
+  });
+});
+
+// Use server.listen instead of app.listen
+server.listen(PORT, () => {
+  console.log(`✅ Server and Sockets running on port ${PORT}`);
+});
 
 // Middleware
 app.use(cors());
@@ -369,5 +388,178 @@ app.delete("/api/journal/delete/:id", async (req, res) => {
     res.json({ message: "Deleted" });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete" });
+  }
+});
+
+// --- COUNSELOR & APPOINTMENT ROUTES ---
+
+// GET: All counselors (already mostly done, but ensure this matches frontend)
+app.get("/api/counselors", async (req, res) => {
+  try {
+    const counselors = await prisma.user.findMany({
+      where: { role: "counselor" },
+      select: { id: true, name: true, email: true, createdAt: true }
+    });
+    res.json(counselors);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch counselors" });
+  }
+});
+
+// POST: Book an appointment
+app.post("/api/appointments/book", async (req, res) => {
+  const { userId, counselorId, date, time, sessionType, notes } = req.body;
+  try {
+    const appointment = await prisma.appointment.create({
+      data: {
+        userId: parseInt(userId),
+        counselorId: parseInt(counselorId),
+        date: new Date(date),
+        time,
+        sessionType,
+        notes,
+        status: "pending"
+      }
+    });
+    res.status(201).json(appointment);
+  } catch (error) {
+    res.status(500).json({ error: "Booking failed" });
+  }
+});
+
+// GET: User's appointments
+app.get("/api/appointments/user/:userId", async (req, res) => {
+  try {
+    const appointments = await prisma.appointment.findMany({
+      where: { userId: parseInt(req.params.userId) },
+      include: { counselor: { select: { name: true, email: true } } },
+      orderBy: { date: 'asc' }
+    });
+    res.json(appointments);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch appointments" });
+  }
+});
+
+// --- MESSAGING ROUTES ---
+
+// GET: Chat history between user and counselor
+app.get("/api/messages/:userId/:counselorId", async (req, res) => {
+  const { userId, counselorId } = req.params;
+  try {
+    const messages = await prisma.message.findMany({
+      where: {
+        OR: [
+          { senderId: parseInt(userId), receiverId: parseInt(counselorId) },
+          { senderId: parseInt(counselorId), receiverId: parseInt(userId) }
+        ]
+      },
+      include: { 
+        sender: { select: { name: true } },
+        receiver: { select: { name: true } }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+// POST: Send a message
+app.post("/api/messages", async (req, res) => {
+  const { senderId, receiverId, content } = req.body;
+  try {
+    const message = await prisma.message.create({
+      data: {
+        senderId: parseInt(senderId),
+        receiverId: parseInt(receiverId),
+        content
+      },
+      include: { 
+        sender: { select: { name: true } },
+        receiver: { select: { name: true } }
+      }
+    });
+
+    // 💡 ADD THIS: Emit the message to the receiver's socket room
+    io.to(`user_${receiverId}`).emit('new_message', message);
+
+    res.status(201).json(message);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+// --- COUNSELOR DASHBOARD API ---
+
+// 1. Get stats for a specific counselor
+app.get("/api/counselor/stats/:counselorId", async (req, res) => {
+  try {
+    const counselorId = parseInt(req.params.counselorId);
+
+    const [totalAppts, upcomingAppts, completedAppts, totalUsers] = await Promise.all([
+      prisma.appointment.count({ where: { counselorId } }),
+      prisma.appointment.count({ where: { counselorId, status: "pending" } }),
+      prisma.appointment.count({ where: { counselorId, status: "completed" } }),
+      prisma.appointment.groupBy({
+        by: ['userId'],
+        where: { counselorId },
+      }).then(groups => groups.length)
+    ]);
+
+    res.json({
+      totalAppointments: totalAppts,
+      upcomingAppointments: upcomingAppts,
+      completedAppointments: completedAppts,
+      totalUsers: totalUsers
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch counselor stats" });
+  }
+});
+
+// 2. Get all users with their mental health activity (Todos & Chat Messages)
+app.get("/api/counselor/users", async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { role: "user" },
+      include: {
+        _count: {
+          select: { 
+            todos: true, 
+            sentMessages: true, 
+            receivedMessages: true 
+          }
+        },
+        todos: true,
+        // Fetch relations exactly as named in schema_4.prisma
+        sentMessages: {
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        },
+        receivedMessages: {
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        }
+      }
+    });
+
+    // Map the data to match the 'messages' array expected by ConsoleDashboard_3.tsx
+    const formattedUsers = users.map(u => ({
+      ...u,
+      _count: {
+        todos: u._count.todos,
+        messages: u._count.sentMessages + u._count.receivedMessages
+      },
+      messages: [...u.sentMessages, ...u.receivedMessages].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      )
+    }));
+
+    res.json(formattedUsers);
+  } catch (error) {
+    console.error("Counselor Users Error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
