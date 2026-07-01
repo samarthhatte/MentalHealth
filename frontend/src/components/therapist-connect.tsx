@@ -7,15 +7,10 @@ import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { 
   UserCheck, 
-  MapPin, 
-  Star, 
   Calendar, 
-  DollarSign, 
   Phone, 
   Video, 
   MessageCircle,
-  Filter,
-  Heart,
   Send,
   Clock
 } from 'lucide-react';
@@ -36,6 +31,7 @@ interface Appointment {
   status: string;
   sessionType: string;
   notes?: string;
+  videoLink?: 'https://whereby.com/digital-mental-health'; // 👈 Added videoLink field
   counselor: {
     name: string;
     email: string;
@@ -45,6 +41,7 @@ interface Appointment {
 interface Message {
   id: number;
   content: string;
+  senderId: number; 
   createdAt: string;
   isRead: boolean;
   sender: {
@@ -62,7 +59,6 @@ export function TherapistConnect() {
   const [counselors, setCounselors] = useState<Counselor[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedCounselor, setSelectedCounselor] = useState<Counselor | null>(null);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -94,7 +90,11 @@ export function TherapistConnect() {
     newSocket.emit('join', user.id);
 
     newSocket.on('new_message', (message: Message) => {
-      setMessages(prev => [...prev, message]);
+      setMessages(prev => {
+        const isDuplicate = prev.some(m => m.id === message.id);
+        if (isDuplicate) return prev;
+        return [...prev, message];
+      });
     });
 
     return () => {
@@ -225,7 +225,6 @@ export function TherapistConnect() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Counselor Info */}
             <div className="lg:col-span-1">
               <Card className="p-4">
                 <div className="text-center mb-4">
@@ -253,7 +252,6 @@ export function TherapistConnect() {
               </Card>
             </div>
 
-            {/* Booking Form */}
             <div className="lg:col-span-2">
               <Card className="p-6">
                 <h3 className="mb-4">Request Appointment</h3>
@@ -333,21 +331,24 @@ export function TherapistConnect() {
           </div>
 
           <div className="h-96 flex flex-col">
-            <div className="flex-1 overflow-y-auto mb-4 p-4 border rounded-lg">
-              {messages.map((message) => (
-                <div key={message.id} className={`mb-3 ${message.sender.name === user?.name ? 'text-right' : 'text-left'}`}>
-                  <div className={`inline-block p-3 rounded-lg max-w-xs ${
-                    message.sender.name === user?.name 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-200 dark:bg-gray-700'
-                  }`}>
-                    <p className="text-sm">{message.content}</p>
-                    <p className="text-xs opacity-70 mt-1">
-                      {new Date(message.createdAt).toLocaleTimeString()}
-                    </p>
+            <div className="flex-1 overflow-y-auto mb-4 p-4 border rounded-lg flex flex-col gap-3">
+              {messages.map((message) => {
+                const isMe = Number(message.senderId) === Number(user?.id);
+                return (
+                  <div key={message.id} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] p-3 rounded-2xl shadow-sm ${
+                      isMe 
+                        ? 'bg-blue-600 text-white rounded-tr-none' 
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-tl-none'
+                    }`}>
+                      <p className="text-sm leading-relaxed">{message.content}</p>
+                      <div className={`text-[10px] mt-1 opacity-70 flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="flex gap-2">
@@ -454,20 +455,34 @@ export function TherapistConnect() {
                       <p className="text-sm text-muted-foreground">
                         {formatDate(appointment.date)} at {appointment.time}
                       </p>
-                      <p className="text-sm text-muted-foreground">
-                        {appointment.sessionType} session
+                      <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3 inline text-zinc-400" />
+                        <span className="capitalize">{appointment.sessionType} session</span>
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <Badge variant={appointment.status === 'confirmed' ? 'default' : 'secondary'}>
-                      {appointment.status}
-                    </Badge>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      <Clock className="w-3 h-3 inline mr-1" />
-                      {appointment.sessionType}
-                    </p>
-                  </div>
+
+                  <div className="text-right flex flex-col items-end gap-2">
+  <Badge variant={appointment.status === 'confirmed' ? 'default' : 'secondary'}>
+    {appointment.status}
+  </Badge>
+  
+  {/* 🔍 TESTING OVERRIDE: Allow the button to show if status is confirmed OR pending */}
+  {(appointment.status === 'confirmed' || appointment.status.toLowerCase() === 'pending') && appointment.sessionType === 'video' && (
+    <Button 
+      size="sm" 
+      className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 shadow-sm"
+      onClick={() => {
+        // 🔍 TESTING OVERRIDE: Use your hardcoded test room link directly
+        const testLink = "https://whereby.com/digital-mental-health"; // 👈 Use your exact Daily.co link!
+        window.open(testLink, '_blank');
+      }}
+    >
+      <Video className="w-3.5 h-3.5" />
+      Join Video Call
+    </Button>
+  )}
+</div>
                 </div>
                 {appointment.notes && (
                   <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -480,7 +495,7 @@ export function TherapistConnect() {
         </div>
       )}
 
-      {/* Information */}
+      {/* Information Footer */}
       <Card className="p-6">
         <h3 className="mb-4">How It Works</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">

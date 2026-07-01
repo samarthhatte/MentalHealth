@@ -19,8 +19,11 @@ import {
   Eye,
   CheckCircle,
   Clock,
-  User
+  User,
+  Send,
+  Video
 } from 'lucide-react';
+import { Input } from '../components/ui/input';
 
 interface UserData {
   id: number;
@@ -28,18 +31,17 @@ interface UserData {
   email: string;
   createdAt: string;
   updatedAt: string;
-_count: {
+  _count: {
     todos: number;
-    messages: number; // Changed from messages[cite: 16]
+    messages: number;
   };
-
   todos: Array<{
     id: number;
     title: string;
     completed: boolean;
     createdAt: string;
   }>;
-messages: Array<{ // 🛡️ ADD: This replaces messages
+  messages: Array<{
     id: number;
     content: string;
     senderId: number;
@@ -54,6 +56,18 @@ interface CounselorStats {
   totalUsers: number;
 }
 
+interface Appointment {
+  id: number;
+  userId: number;
+  userName: string;
+  date: string;
+  sessionType?: string;
+  time: string;
+  status: 'PENDING' | 'UPCOMING' | 'COMPLETED' | 'CANCELLED';
+  type: string;
+  videoLink?: 'https://whereby.com/digital-mental-health'; // 👈 FIX 1: Added videoLink to interface so TypeScript can parse safely
+}
+
 export default function CounselorDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -62,8 +76,9 @@ export default function CounselorDashboard() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [stats, setStats] = useState<CounselorStats | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
-
-  const API_BASE = 'http://localhost:5000';
+  const [replyMessage, setReplyMessage] = useState('');
+  const API_BASE = 'http://localhost:5000'; // Base API keeps its clean root matching your setups
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   async function parseJsonSafe(response: Response) {
     const text = await response.text();
@@ -79,19 +94,21 @@ export default function CounselorDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [usersRes, statsRes] = await Promise.all([
+      const [usersRes, statsRes, appointmentsRes] = await Promise.all([
         fetch(`${API_BASE}/api/counselor/users`),
-        fetch(`${API_BASE}/api/counselor/stats/${user?.id}`)
+        fetch(`${API_BASE}/api/counselor/stats/${user?.id}`),
+        fetch(`${API_BASE}/api/counselor/appointments/${user?.id}`)
       ]);
 
       const usersData = usersRes.ok ? await parseJsonSafe(usersRes) : [];
       const statsData = statsRes.ok ? await parseJsonSafe(statsRes) : null;
+      const appointmentsData = appointmentsRes.ok ? await parseJsonSafe(appointmentsRes) : [];
 
       setUsers(usersData);
       setStats(statsData);
+      setAppointments(appointmentsData);
     } catch (error) {
       console.error('Failed to fetch counselor data:', error);
-      // Set fallback data
       setUsers([
         {
           id: 1,
@@ -104,30 +121,50 @@ export default function CounselorDashboard() {
             { id: 1, title: 'Practice breathing exercises', completed: true, createdAt: '2024-01-20T00:00:00.000Z' },
             { id: 2, title: 'Journal about feelings', completed: false, createdAt: '2024-01-19T00:00:00.000Z' }
           ],
- messages: [
-      { 
-        id: 1, 
-        content: "I'm feeling anxious today", 
-        senderId: 1, // 🛡️ Use a Number, not a String
-        createdAt: '2024-01-20T00:00:00.000Z' 
-      },
-      { 
-        id: 2, 
-        content: "That's completely normal. Let's try some breathing exercises.", 
-        senderId: Number(user?.id) || 999, // 🛡️ Convert user.id to a Number[cite: 15]
-        createdAt: '2024-01-20T00:00:00.000Z' 
-      }
-    ]
-  }
-]);
+          messages: [
+            { id: 1, content: "I'm feeling anxious today", senderId: 1, createdAt: '2024-01-20T00:00:00.000Z' },
+            { id: 2, content: "That's completely normal. Let's try some breathing exercises.", senderId: Number(user?.id) || 999, createdAt: '2024-01-20T00:00:00.000Z' }
+          ]
+        }
+      ]);
       setStats({
         totalAppointments: 12,
         upcomingAppointments: 3,
         completedAppointments: 9,
         totalUsers: 8
       });
+      setAppointments([
+        { id: 1, userId: 1, userName: 'John Doe', date: '2024-05-20', time: '10:00 AM', status: 'UPCOMING', type: 'Video Call' }
+      ]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendReply = async () => {
+    if (!selectedUser || !replyMessage.trim() || !user?.id) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderId: Number(user.id),
+          receiverId: selectedUser.id,
+          content: replyMessage
+        })
+      });
+
+      if (response.ok) {
+        const newMessage = await response.json();
+        setSelectedUser({
+          ...selectedUser,
+          messages: [...selectedUser.messages, newMessage]
+        });
+        setReplyMessage('');
+      }
+    } catch (error) {
+      console.error("Failed to send reply:", error);
     }
   };
 
@@ -260,8 +297,85 @@ export default function CounselorDashboard() {
 
           <TabsContent value="appointments">
             <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Appointments</h3>
-              <p className="text-muted-foreground">Appointment management coming soon...</p>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold">Scheduled Appointments</h3>
+                <Badge variant="outline" className="px-3 py-1">
+                  {appointments.length} Upcoming Session{appointments.length !== 1 ? 's' : ''}
+                </Badge>
+              </div>
+
+              {appointments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed rounded-xl bg-muted/30">
+                  <div className="bg-background p-4 rounded-full shadow-sm mb-4">
+                    <Calendar className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <p className="text-muted-foreground font-medium">No appointments found.</p>
+                  <p className="text-xs text-muted-foreground">Sessions scheduled by users will appear here.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {appointments.map((apt) => (
+                    <div 
+                      key={apt.id} 
+                      className="flex items-center justify-between p-4 border rounded-xl hover:bg-muted/50 transition-all group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-pink-500/10 flex items-center justify-center text-pink-500">
+                          <User className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-base">{apt.userName}</p>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-blue-500" /> 
+                              {new Date(apt.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-purple-500" /> 
+                              {apt.time}
+                            </span>
+                            <span className="flex items-center gap-1.5 capitalize">
+                              <Activity className="w-3.5 h-3.5 text-orange-500" /> 
+                              {apt.type}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+<div className="flex items-center gap-3">
+  <Badge 
+    className={`
+      ${apt.status === 'UPCOMING' ? 'bg-green-500/10 text-green-600 border-green-200' : ''}
+      ${apt.status === 'PENDING' ? 'bg-amber-500/10 text-amber-600 border-amber-200' : ''}
+      ${apt.status === 'CANCELLED' ? 'bg-red-500/10 text-red-600 border-red-200' : ''}
+      ${apt.status === 'COMPLETED' ? 'bg-blue-500/10 text-blue-600 border-blue-200' : ''}
+      capitalize border
+    `}
+    variant="secondary"
+  >
+    {apt.status.toLowerCase()}
+  </Badge>
+
+{/* Updated Button layout container inside ConsoleDashboard.tsx */}
+{(apt.status === 'UPCOMING' || apt.status === 'PENDING') && (
+  <Button 
+    size="sm" 
+    // Removed contrasting style overrides to let Tailwind render a solid blue background
+    className="bg-blue-600 hover:bg-blue-700 text-zinc-50 dark:text-zinc-900 shadow-sm flex items-center gap-1"
+    onClick={async () => {
+      const testLink = "https://whereby.com/digital-mental-health"; 
+      window.open(testLink, '_blank');
+    }}
+  >
+    <Video className="w-4 h-4 text-zinc-50" />
+    <span className="text-zinc-50">Start Session</span>
+  </Button>
+)}
+</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
           </TabsContent>
 
@@ -322,28 +436,39 @@ export default function CounselorDashboard() {
 
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Chat History</h3>
-{/* Inside the User Details Modal - Chat History section */}
-<div className="space-y-3 max-h-96 overflow-y-auto">
-  {selectedUser.messages?.map((message) => (
-    <div 
-    key={message.id} 
-    className={`p-3 rounded-lg ${
-      // Convert user.id to Number to match message.senderId[cite: 15]
-      message.senderId === Number(user?.id) ? 'bg-green-50' : 'bg-blue-50'
-    }`}
-  >
-    <div className="flex items-center gap-2 mb-1">
-      <span className="text-xs font-bold">
-        {message.senderId === Number(user?.id) ? 'You' : selectedUser.name}
-      </span>
-        <span className="text-xs text-muted-foreground">
-          {new Date(message.createdAt).toLocaleString()}
-        </span>
-      </div>
-      <p className="text-sm">{message.content}</p>
-    </div>
-  ))}
-</div>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {selectedUser.messages?.map((message) => {
+                        const isMe = message.senderId === Number(user?.id);
+                        return (
+                          <div key={message.id} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'} mb-2`}>
+                            <div className={`p-3 rounded-lg max-w-[80%] ${isMe ? 'bg-green-100 text-right' : 'bg-blue-100 text-left'}`}>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold opacity-70">
+                                  {isMe ? 'You' : selectedUser.name}
+                                </span>
+                                <p className="text-sm">{message.content}</p>
+                                <span className="text-[10px] opacity-50">
+                                  {new Date(message.createdAt).toLocaleTimeString()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 flex gap-2">
+                      <Input
+                        placeholder="Type your reply to the user..."
+                        value={replyMessage}
+                        onChange={(e) => setReplyMessage(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && sendReply()}
+                      />
+                      <Button onClick={sendReply}>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send Reply
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -229,10 +229,6 @@ app.get("/api/sounds", (req, res) => {
   res.json(sounds);
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
-
 // --- ADMIN MANAGEMENT ROUTES ---
 
 // GET ALL USERS (Role: user)
@@ -409,21 +405,28 @@ app.get("/api/counselors", async (req, res) => {
 // POST: Book an appointment
 app.post("/api/appointments/book", async (req, res) => {
   const { userId, counselorId, date, time, sessionType, notes } = req.body;
+  
   try {
+    // 🛡️ Log the incoming data to your terminal to see what's missing
+    console.log("Booking Attempt:", req.body);
+
     const appointment = await prisma.appointment.create({
       data: {
         userId: parseInt(userId),
         counselorId: parseInt(counselorId),
-        date: new Date(date),
-        time,
-        sessionType,
-        notes,
+        // Convert string to Date object safely
+        date: new Date(date), 
+        time: time,
+        sessionType: sessionType,
+        notes: notes || "", // Ensure this isn't null if your DB requires a string
         status: "pending"
       }
     });
     res.status(201).json(appointment);
   } catch (error) {
-    res.status(500).json({ error: "Booking failed" });
+    // 🔍 This will tell you EXACTLY what Prisma didn't like in your terminal
+    console.error("Prisma Booking Error:", error); 
+    res.status(500).json({ error: "Booking failed", details: error.message });
   }
 });
 
@@ -458,10 +461,14 @@ app.get("/api/messages/:userId/:counselorId", async (req, res) => {
         sender: { select: { name: true } },
         receiver: { select: { name: true } }
       },
-      orderBy: { createdAt: 'asc' }
+      // 🛡️ ADD THIS: Ensures messages are chronological
+      orderBy: { 
+        createdAt: 'asc' 
+      }
     });
     res.json(messages);
   } catch (error) {
+    console.error("Fetch Messages Error:", error);
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
@@ -474,15 +481,17 @@ app.post("/api/messages", async (req, res) => {
       data: {
         senderId: parseInt(senderId),
         receiverId: parseInt(receiverId),
-        content
+        content,
+        isRead: false // Match your DB field 'isRead'
       },
+      // MUST include these relations as seen in your DB screenshot
       include: { 
         sender: { select: { name: true } },
         receiver: { select: { name: true } }
       }
     });
 
-    // 💡 ADD THIS: Emit the message to the receiver's socket room
+    // Notify the user room
     io.to(`user_${receiverId}`).emit('new_message', message);
 
     res.status(201).json(message);
@@ -561,5 +570,37 @@ app.get("/api/counselor/users", async (req, res) => {
   } catch (error) {
     console.error("Counselor Users Error:", error);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// GET: Counselor's appointments with User names
+app.get("/api/counselor/appointments/:counselorId", async (req, res) => {
+  try {
+    const counselorId = parseInt(req.params.counselorId);
+    const appointments = await prisma.appointment.findMany({
+      where: { counselorId: counselorId },
+      include: {
+        user: {
+          select: { name: true }
+        }
+      },
+      orderBy: { date: 'asc' }
+    });
+
+    // Format the data to match your frontend interface
+    const formattedData = appointments.map(apt => ({
+      id: apt.id,
+      userId: apt.userId,
+      userName: apt.user.name,
+      date: apt.date,
+      time: apt.time,
+      status: apt.status.toUpperCase(), // Ensure status is uppercase for your Badge logic
+      type: apt.sessionType || "General"
+    }));
+
+    res.json(formattedData);
+  } catch (error) {
+    console.error("Fetch Counselor Appts Error:", error);
+    res.status(500).json({ error: "Failed to fetch appointments" });
   }
 });
